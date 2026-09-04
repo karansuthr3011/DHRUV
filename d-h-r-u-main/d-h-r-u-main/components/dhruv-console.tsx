@@ -1,25 +1,115 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ICEBERGS } from '@/lib/data/icebergs'
 import { VESSELS } from '@/lib/data/vessels'
-import { AlertTriangle, Bell, Check, ChevronDown, CircleHelp, Cloud, Database, Download, Gauge, History, Layers, Map as MapIcon, Menu, Navigation, Play, Search, Settings2, Ship, Snowflake, Target, Waves, Wind, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { NOTIFICATIONS } from '@/lib/data/sources'
+import { Sidebar, Topbar, NAV } from './dhruv/shell'
+import { MapWorkspace } from './dhruv/workspaces/map-workspace'
+import { RoutePlannerWorkspace } from './dhruv/workspaces/route-planner'
+import { IcebergTrackerWorkspace } from './dhruv/workspaces/iceberg-tracker'
+import { VesselMonitorWorkspace } from './dhruv/workspaces/vessel-monitor'
+import { WeatherOceanWorkspace } from './dhruv/workspaces/weather-ocean'
+import { RiskAnalysisWorkspace } from './dhruv/workspaces/risk-analysis'
+import { HistoricalReplayWorkspace } from './dhruv/workspaces/historical-replay'
+import { DataSourcesWorkspace } from './dhruv/workspaces/data-sources'
+import { ReportsWorkspace } from './dhruv/workspaces/reports'
+import type { MapLayers, SelectedEntity, WorkspaceId } from './dhruv/types'
 
-const nav = [['Map', MapIcon], ['Route Planner', Navigation], ['Iceberg Tracker', Snowflake], ['Vessel Monitor', Ship], ['Weather & Ocean', Cloud], ['Risk Analysis', Target], ['Historical Replay', History], ['Data Sources', Database], ['Reports', Download]] as const
-const riskClass: Record<string, string> = { low: 'text-risk-low border-risk-low/50 bg-risk-low/10', moderate: 'text-risk-moderate border-risk-moderate/50 bg-risk-moderate/10', high: 'text-risk-high border-risk-high/50 bg-risk-high/10', critical: 'text-risk-critical border-risk-critical/50 bg-risk-critical/10' }
-const cx = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ')
+const WORKSPACE_TITLES: Record<WorkspaceId, { eyebrow: string; heading: string }> = {
+  map: { eyebrow: 'Operations Map (Default)', heading: 'Antarctic Operational Picture' },
+  'route-planner': { eyebrow: 'Route Planner', heading: 'Plan & Compare Voyage Routes' },
+  'iceberg-tracker': { eyebrow: 'Iceberg Tracker', heading: 'Iceberg Intelligence' },
+  'vessel-monitor': { eyebrow: 'Vessel Monitor', heading: 'Fleet Status & Exposure' },
+  'weather-ocean': { eyebrow: 'Weather & Ocean', heading: 'Environmental Conditions' },
+  'risk-analysis': { eyebrow: 'Risk Analysis', heading: 'Hazard & Resilience Review' },
+  'historical-replay': { eyebrow: 'Historical Replay', heading: 'Historical Replay Lab' },
+  'data-sources': { eyebrow: 'Data Sources', heading: 'Data & Model Health' },
+  reports: { eyebrow: 'Reports', heading: 'Voyage & Ops Reporting' },
+}
 
-type Item = any
+export default function DhruvConsole() {
+  const [active, setActive] = useState<WorkspaceId>('map')
+  const [selected, setSelected] = useState<SelectedEntity>({ kind: 'vessel', ...VESSELS[0] })
+  const [layers, setLayers] = useState<MapLayers>({ seaIce: true, icebergs: true, vessels: true, routes: true })
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [hoursFromNow, setHoursFromNow] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [unread, setUnread] = useState(NOTIFICATIONS.length)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-function Brand() { return <div className="flex items-center gap-2.5"><div className="flex size-8 items-center justify-center text-2xl text-primary">▲</div><div><div className="font-mono text-lg font-bold tracking-[.17em]">D.H.R.U.V.</div><div className="text-[9px] text-muted-foreground">Navigate Uncertainty</div></div></div> }
-function Topbar({ active, setActive }: { active:string; setActive:(x:string)=>void }) { return <header className="flex min-h-[54px] items-center gap-4 border-b border-border bg-background/95 px-4"><button className="lg:hidden" aria-label="Open navigation"><Menu /></button><div className="hidden xl:block"><div className="text-sm font-semibold">{active === 'Map' ? 'AI-Enabled Antarctic Navigation' : active}</div><div className="text-[10px] text-muted-foreground">Safer routes. Smarter decisions. A more resilient tomorrow.</div></div><div className="flex flex-1 items-center justify-end gap-3"><div className="hidden max-w-[330px] flex-1 items-center gap-2 rounded border border-border bg-panel px-3 py-2 text-[11px] text-muted-foreground md:flex"><Search /> Search location, iceberg, vessel... <kbd className="ml-auto rounded border border-border px-1.5">Ctrl K</kbd></div><div className="hidden rounded border border-border bg-panel px-3 py-1.5 text-[10px] sm:block"><span className="mr-1.5 text-risk-low">●</span>Live Data<div className="text-[9px] text-muted-foreground">12 Aug 2026, 14:32 UTC</div></div><Bell className="text-muted-foreground" /></div></header> }
-function Sidebar({ active, setActive }: { active:string; setActive:(x:string)=>void }) { return <nav className="hidden w-[148px] shrink-0 border-r border-border bg-sidebar p-3 lg:flex lg:flex-col"><div className="border-b border-border px-1 pb-5 pt-1"><Brand /></div><div className="flex flex-col gap-1 py-4">{nav.map(([label, Icon]) => <button key={label} onClick={() => setActive(label)} className={cx('flex items-center gap-3 rounded px-3 py-2 text-left text-xs transition-colors', active === label ? 'bg-sidebar-accent text-foreground ring-1 ring-primary/60' : 'text-muted-foreground hover:bg-sidebar-accent')}><Icon className="size-4" />{label}</button>)}</div><div className="mt-auto border-t border-border pt-4 text-[10px] text-muted-foreground"><div className="mb-3 flex items-center gap-2 text-foreground"><Settings2 className="size-3.5" />System Status</div><div className="flex justify-between"><span>Data feeds</span><span className="text-risk-low">Operational</span></div><div className="mt-1 flex justify-between"><span>Models</span><span className="text-risk-low">v2.3.0</span></div><div className="mt-5 flex gap-2"><span className="text-primary">✦</span><span>Explore Today.<br />Safer Tomorrows.</span></div></div></nav> }
-function MapSurface({ selected, setSelected, layers, setLayers, icebergMode = false }: { selected:Item; setSelected:(x:Item)=>void; layers:any; setLayers:(x:any)=>void; icebergMode?:boolean }) { const points = useMemo(() => [...ICEBERGS.map((x:any)=>({...x,kind:'iceberg'})), ...VESSELS.map((x:any)=>({...x,kind:'vessel'}))], []); return <div className="relative min-h-[450px] flex-1 overflow-hidden rounded border border-border bg-[#071522]"><div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#dceaf4_0%,#6bb4df_21%,#12659c_35%,transparent_54%),radial-gradient(ellipse_at_center,transparent_0_48%,#0a2032_70%),linear-gradient(135deg,#06111e,#0a2b40_55%,#04101c)] opacity-90" /><div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(117,197,241,.25)_1px,transparent_1px),linear-gradient(90deg,rgba(117,197,241,.25)_1px,transparent_1px)] [background-size:44px_44px]" /><div className="absolute left-[18%] top-[17%] h-[67%] w-[64%] rounded-[50%] border border-primary/30 bg-slate-100/70 shadow-[0_0_90px_rgba(163,220,247,.35)]" /><div className="absolute left-[30%] top-[42%] text-[10px] font-semibold tracking-[.42em] text-slate-700/75">ANTARCTICA</div>{layers.routes && <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M16 61 C28 52 35 27 56 26 S82 39 92 68" fill="none" stroke="var(--risk-low)" strokeWidth=".65" /><path d="M16 61 C30 50 39 25 58 21 S84 37 93 69" fill="none" stroke="var(--risk-moderate)" strokeDasharray="2 2" strokeWidth=".42" /><path d="M18 61 C32 55 43 44 60 46 S82 56 93 73" fill="none" stroke="var(--risk-critical)" strokeDasharray="2 2" strokeWidth=".42" /></svg>}{layers.icebergs && points.filter((p:any)=>p.kind==='iceberg').map((p:any) => <button key={p.id} aria-label={`Inspect iceberg ${p.name}`} onClick={() => setSelected(p)} className={cx('absolute z-10 -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-125', selected?.id === p.id && 'scale-125')} style={{ left: `${Math.max(5, Math.min(95, ((p.lon + 180) / 360) * 100))}%`, top: `${Math.max(7, Math.min(92, ((-p.lat - 55) / 35) * 100))}%` }}><span className={cx('block size-3 rotate-45 border-2 bg-info/80', p.risk === 'critical' ? 'border-risk-critical' : p.risk === 'high' ? 'border-risk-high' : 'border-primary')} /></button>)}{layers.vessels && points.filter((p:any)=>p.kind==='vessel').map((p:any) => <button key={p.id} aria-label={`Inspect vessel ${p.name}`} onClick={() => setSelected(p)} className="absolute z-20 -translate-x-1/2 -translate-y-1/2" style={{ left: `${Math.max(5, Math.min(95, ((p.lon + 180) / 360) * 100))}%`, top: `${Math.max(7, Math.min(92, ((-p.lat - 55) / 35) * 100))}%` }}><span className="flex size-7 items-center justify-center rounded-full border-2 border-primary bg-background/90 text-primary shadow-[0_0_15px_rgba(73,211,255,.8)]"><Ship className="size-4" /></span></button>)}<div className="absolute left-3 top-3 rounded border border-border bg-panel/90 px-2.5 py-2 text-[10px] text-muted-foreground"><span className="mr-1.5 text-risk-low">●</span>Live Data<div className="mt-0.5 text-[9px]">Sea ice · vessels · forecast</div></div><div className="absolute right-3 top-3 flex flex-col overflow-hidden rounded border border-border bg-panel/90"><button className="p-2 hover:bg-accent" aria-label="Zoom in"><ZoomIn className="size-4" /></button><button className="border-t border-border p-2 hover:bg-accent" aria-label="Zoom out"><ZoomOut className="size-4" /></button><button className="border-t border-border p-2 hover:bg-accent" aria-label="Layers"><Layers className="size-4" /></button></div>{!icebergMode && <div className="absolute bottom-3 left-3 rounded border border-border bg-panel/90 px-3 py-2 text-[10px] text-muted-foreground">64.2° S, 32.8° E<br />EPSG:3031</div>}<div className="absolute bottom-3 right-3 flex items-center gap-2 rounded border border-border bg-panel/90 px-2.5 py-2 text-[10px]"><span className="text-risk-low">●</span>{icebergMode ? 'Observed Track' : 'Real-time'}<span className="h-1 w-20 rounded bg-primary/40"><span className="block h-1 w-3/5 rounded bg-primary" /></span></div></div> }
-function Card({ title, children, className='' }: {title:string;children:React.ReactNode;className?:string}) { return <section className={cx('rounded border border-border bg-panel/80', className)}><div className="flex items-center justify-between border-b border-border px-3 py-2"><h2 className="text-xs font-semibold">{title}</h2><CircleHelp className="size-3.5 text-muted-foreground" /></div>{children}</section> }
-function Inspector({ item, close }: { item:Item; close:()=>void }) { if (!item) return null; const vessel = item.kind === 'vessel'; return <aside className="w-full overflow-hidden rounded border border-primary/40 bg-panel/95 shadow-xl lg:absolute lg:right-3 lg:top-3 lg:z-20 lg:w-[300px]"><div className="flex items-start justify-between border-b border-border p-3"><div><div className="text-sm font-semibold">{item.name}</div><div className="text-[10px] text-muted-foreground">{vessel ? 'Research Vessel' : `${item.sizeClass || 'Very Large'} Iceberg`}</div></div><button aria-label="Close inspector" onClick={close}><X className="size-4" /></button></div>{vessel && <div className="h-16 bg-gradient-to-r from-[#193c52] via-[#8eb3c4] to-[#405767] p-2 text-[10px] text-background"><span className="rounded bg-background/80 px-2 py-1">LIVE</span></div>}<div className="flex gap-5 border-b border-border px-3 pt-3 text-[10px]"><span className="border-b-2 border-primary pb-2 text-primary">Overview</span><span className="pb-2 text-muted-foreground">Track</span><span className="pb-2 text-muted-foreground">Forecast</span><span className="pb-2 text-muted-foreground">Risk</span></div><div className="grid grid-cols-3 gap-2 p-3 text-[10px]"><div><span className="text-muted-foreground">{vessel ? 'Speed' : 'Size (est.)'}</span><strong className="mt-1 block">{vessel ? `${item.speedKn || 12.4} kn` : `${item.lengthKm || 62} km`}</strong></div><div><span className="text-muted-foreground">{vessel ? 'Heading' : 'Drift Speed'}</span><strong className="mt-1 block">{vessel ? `${item.headingDeg || 184}° S` : `${item.driftSpeedKn || 2.1} kn`}</strong></div><div><span className="text-muted-foreground">Risk</span><strong className={cx('mt-1 block capitalize', (riskClass[item.risk] || riskClass.high).split(' ')[0])}>{item.risk || 'high'}</strong></div></div><div className="m-3 rounded border border-primary/40 bg-elevated p-3 text-[10px]"><div className="mb-2 font-semibold text-primary">Why this matters?</div><p className="leading-relaxed text-muted-foreground">Projected path intersects the alternative route in 48–72h. Its uncertainty envelope is expanding, requiring route resilience review.</p><button className="mt-3 w-full rounded border border-primary bg-primary/10 px-2 py-2 text-primary">Compare Route Impact →</button></div></aside> }
-function Timeline() { return <div className="rounded border border-border bg-panel px-3 py-2"><div className="flex items-center gap-3 text-[10px]"><button className="flex size-7 items-center justify-center rounded-full border border-border bg-elevated"><Play className="size-3.5 fill-current" /></button><strong>12 Aug 2026</strong><span className="text-muted-foreground">14:00 UTC</span><div className="h-1 flex-1 rounded bg-primary/30"><div className="h-1 w-2/3 rounded bg-primary" /></div><span className="hidden text-muted-foreground sm:block">Aug 12　 Aug 13　 Aug 14　 Aug 15</span><span className="text-risk-low">● Live</span><span className="rounded border border-border px-2 py-1">72h <ChevronDown className="inline size-3" /></span></div></div> }
-function OverviewCards() { return <div className="grid gap-3 xl:grid-cols-4"><Card title="Sea Ice Concentration"><div className="flex gap-3 p-3"><div className="h-20 flex-1 rounded bg-[radial-gradient(circle_at_center,#dceaf4,#55a9dc_38%,#07304d_75%)]" /><div className="text-[9px] text-muted-foreground">100%<br /><br />75%<br /><br />50%<br /><br />25%</div></div><div className="px-3 pb-2 text-[9px] text-muted-foreground">Source: Copernicus · 3h ago</div></Card><Card title="Iceberg Forecast"><div className="m-3 h-20 rounded bg-[linear-gradient(135deg,#081a2a,#2d7199,#0b2338)]" /><div className="px-3 pb-2 text-[9px] text-muted-foreground">A-68A · Observed + predicted track</div></Card><Card title="Route Comparison"><div className="flex flex-col gap-2 p-3 text-[10px]"><div className="flex justify-between"><span className="text-risk-low">● Primary Route</span><span>2,840 km · 12.5 days</span></div><div className="flex justify-between"><span className="text-risk-moderate">● Alternative Route</span><span>3,010 km · 13.1 days</span></div><div className="flex justify-between"><span className="text-risk-critical">● Fallback Route</span><span>3,220 km · 14.8 days</span></div></div></Card><Card title="Environmental Conditions"><div className="grid grid-cols-4 gap-2 p-3 text-center text-[10px]"><div><Wind className="mx-auto mb-2 size-4 text-muted-foreground" />22 kn<br /><span className="text-muted-foreground">Wind</span></div><div><Gauge className="mx-auto mb-2 size-4 text-muted-foreground" />-18°C<br /><span className="text-muted-foreground">Air Temp</span></div><div><Waves className="mx-auto mb-2 size-4 text-muted-foreground" />2.1 m<br /><span className="text-muted-foreground">Waves</span></div><div><Snowflake className="mx-auto mb-2 size-4 text-muted-foreground" />-1.8°C<br /><span className="text-muted-foreground">Sea Temp</span></div></div></Card></div> }
-function TablePanel({ title, rows }: { title:string; rows:string[][] }) { return <Card title={title}><div className="overflow-x-auto p-3"><table className="w-full text-left text-[10px]"><thead><tr className="text-muted-foreground">{rows[0].map((x,i)=><th key={i} className="pb-2 pr-4 font-normal">{x}</th>)}</tr></thead><tbody>{rows.slice(1).map((row,i)=><tr key={i} className="border-t border-border">{row.map((x,j)=><td key={j} className="py-2 pr-4"><span className={j === row.length-1 ? cx('rounded border px-1.5 py-0.5', x === 'Healthy' ? riskClass.low : riskClass.moderate) : ''}>{x}</span></td>)}</tr>)}</tbody></table></div></Card> }
-function Workspace({ active, selected, setSelected, layers, setLayers }: any) { if (active === 'Route Planner') return <div className="grid gap-3 xl:grid-cols-[1.25fr_.9fr]"><MapSurface selected={selected} setSelected={setSelected} layers={layers} setLayers={setLayers} /><div className="flex flex-col gap-3"><Card title="Vessel & Planning Settings"><div className="grid grid-cols-2 gap-3 p-3 text-[10px]"><span>Vessel<br /><b>MV Polar Explorer</b></span><span>Ice Class<br /><b>PC3</b></span><span>Cruise Speed<br /><b>12 kn</b></span><span>Planning Horizon<br /><b>7 days</b></span></div><div className="border-t border-border p-3"><div className="mb-2 text-primary">Decision Mode</div><div className="grid grid-cols-3 gap-1"><button className="rounded border border-border p-2">Conservative</button><button className="rounded border border-primary bg-primary/10 p-2 text-primary">Balanced</button><button className="rounded border border-border p-2">Efficient</button></div></div></Card><TablePanel title="Route Options" rows={[['Route','Distance','Time','Exposure'],['Primary','2,840 km','11.8 d','Moderate'],['Alternative','3,010 km','13.1 d','High'],['Fallback','3,220 km','14.8 d','High']]} /><Card title="Why this route?"><div className="p-3 text-[10px] text-muted-foreground"><p>Lower exposure to high iceberg density and better resilience under forecast variability.</p><button className="mt-3 w-full rounded border border-primary bg-primary/10 px-3 py-2 text-primary">Confirm and Save Route →</button></div></Card></div></div>; if (active === 'Iceberg Tracker') return <div className="grid gap-3 xl:grid-cols-[.7fr_1.3fr_.8fr]"><TablePanel title="Iceberg Intelligence" rows={[['ID','Status','Size','Risk'],['A-68A','Tracked','62 km','High'],['A-23A','Tracked','27 km','Moderate'],['B-1ST','Tracked','18 km','Moderate'],['C-19','Unmatched','6 km','Low'],['D-02','Tracked','14 km','Low']]} /><MapSurface selected={selected} setSelected={setSelected} layers={{...layers,routes:false}} setLayers={setLayers} icebergMode /><Inspector item={selected?.kind === 'iceberg' ? selected : ICEBERGS[0]} close={() => setSelected(null)} /></div>; if (active === 'Historical Replay') return <div className="grid gap-3 xl:grid-cols-[.7fr_1.4fr_.8fr]"><TablePanel title="Select a Historical Case" rows={[['Case','Date','Status'],['A-68A Drift','01 Dec 2020','Validated'],['Rota Storm','10 Jan 2016','Moderate error'],['C-18A Grounding','21 Apr 2014','High uncertainty'],['D-29 Calving','08 May 2010','Good fit']]} /><div className="flex flex-col gap-3"><MapSurface selected={selected} setSelected={setSelected} layers={{...layers,routes:false}} setLayers={setLayers} icebergMode /><Timeline /></div><TablePanel title="Forecast vs Actual" rows={[['Metric','Value','Status'],['Displacement Error','18.4 km','Healthy'],['Track Error','24.7 km','Healthy'],['Uncertainty Coverage','82%','Healthy'],['Route Outcome','Minor deviation','Healthy']]} /></div>; if (active === 'Data Sources') return <div className="grid gap-3 xl:grid-cols-[1.5fr_1fr]"><TablePanel title="Data & Model Health" rows={[['Source','Coverage','Freshness','Status'],['Sea Ice (Copernicus)','Global','3 h','Healthy'],['Iceberg Data (NIC)','Antarctic','3 h','Healthy'],['Weather (ECMWF)','Global','1 h','Healthy'],['Ocean (CMEMS)','Southern Ocean','6 h','Degraded'],['AIS (Spire)','Global','15 min','Healthy']]} /><div className="flex flex-col gap-3"><TablePanel title="Model Health" rows={[['Model','Version','Last Validation','Status'],['Sea-Ice Forecast','v1.4.2','03 Aug 2026','Healthy'],['Iceberg Drift','v2.1.0','02 Aug 2026','Healthy'],['Route Risk','v1.8.1','01 Aug 2026','Degraded']]} /><Card title="Data Snapshot & Reproducibility"><div className="p-3 text-[10px] text-muted-foreground">Case ID　DHRUV-2026-08-12-001<br />Data Snapshot　12 Aug 2026 14:32 UTC<br />Planning Type　12 Aug 2026 14:00 UTC</div></Card></div></div>; return <><div className="relative flex min-h-[480px] flex-col gap-3 lg:flex-row"><MapSurface selected={selected} setSelected={setSelected} layers={layers} setLayers={setLayers} /><Inspector item={selected} close={() => setSelected(null)} /><div className="w-full shrink-0 lg:w-[260px]"><Card title="Operational Area"><div className="p-3"><div className="mb-3 text-[11px] text-muted-foreground">Weddell Sea</div><div className="grid grid-cols-3 gap-2 border-b border-border pb-3 text-center text-[10px]"><div>Vessels<br /><b className="text-lg">6</b></div><div>Icebergs<br /><b className="text-lg">24</b></div><div>Risk Zones<br /><b className="text-lg">2</b></div></div><div className="mt-3 text-[10px] font-semibold">Top Hazards</div>{[['A-68A (very large)','High'],['Dense Sea Ice','Moderate'],['B-1ST (large)','Moderate']].map(([x,y])=><div key={x} className="mt-2 flex items-center justify-between rounded border border-border px-2 py-2 text-[10px]"><span><AlertTriangle className="mr-1 inline size-3 text-risk-high" />{x}</span><span className={cx('rounded border px-1.5 py-0.5', riskClass[y === 'High' ? 'high' : 'moderate'])}>{y}</span></div>)}<button className="mt-3 w-full rounded border border-primary px-2 py-2 text-[10px] text-primary">View All Hazards →</button></div></Card></div></div><Timeline /><OverviewCards /></> }
+  useEffect(() => {
+    if (playing) {
+      intervalRef.current = setInterval(() => {
+        setHoursFromNow((h) => (h >= 72 ? -24 : h + 1))
+      }, 400)
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [playing])
 
-export default function DhruvConsole() { const [active, setActive] = useState('Map'); const [selected, setSelected] = useState<Item>({...VESSELS[0], kind:'vessel'}); const [layers,setLayers] = useState({icebergs:true,vessels:true,routes:true}); return <main className="flex min-h-screen bg-background text-foreground"><Sidebar active={active} setActive={setActive} /><section className="flex min-w-0 flex-1 flex-col"><Topbar active={active} setActive={setActive} /><div className="ops-scroll flex-1 overflow-auto p-3 md:p-4"><div className="mb-3 flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-[.2em] text-primary">{active === 'Map' ? 'Operations Map (Default)' : active}</div><h1 className="mt-1 text-lg font-semibold">{active === 'Map' ? 'Antarctic Operational Picture' : active === 'Iceberg Tracker' ? 'Iceberg Intelligence' : active === 'Data Sources' ? 'Data & Model Health' : active}</h1></div><div className="hidden items-center gap-2 text-[10px] text-muted-foreground md:flex"><span className="rounded border border-border px-2 py-1">Current View</span><span className="rounded border border-border px-2 py-1">Antarctica <ChevronDown className="inline size-3" /></span></div></div><Workspace active={active} selected={selected} setSelected={setSelected} layers={layers} setLayers={setLayers} /></div></section></main> }
+  const toggleLayer = (key: keyof MapLayers) => setLayers((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  const selectEntity = (id: string, target: WorkspaceId) => {
+    const iceberg = ICEBERGS.find((b) => b.id === id)
+    const vessel = VESSELS.find((v) => v.id === id)
+    if (iceberg) setSelected({ kind: 'iceberg', ...iceberg })
+    else if (vessel) setSelected({ kind: 'vessel', ...vessel })
+    setActive(target)
+  }
+
+  const title = WORKSPACE_TITLES[active]
+
+  return (
+    <main className="flex min-h-screen bg-background text-foreground">
+      <Sidebar active={active} setActive={setActive} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} />
+      <section className="flex min-w-0 flex-1 flex-col">
+        <Topbar
+          active={active}
+          mobileNavOpen={mobileNavOpen}
+          setMobileNavOpen={setMobileNavOpen}
+          notificationCount={unread}
+          onSelectEntity={selectEntity}
+          onDismissNotifications={() => setUnread(0)}
+        />
+        <div className="ops-scroll flex-1 overflow-auto p-3 md:p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-[.2em] text-primary">{title.eyebrow}</div>
+              <h1 className="mt-1 text-lg font-semibold">{title.heading}</h1>
+            </div>
+          </div>
+
+          {active === 'map' && (
+            <MapWorkspace
+              selected={selected}
+              onSelect={setSelected}
+              layers={layers}
+              onToggleLayer={toggleLayer}
+              hoursFromNow={hoursFromNow}
+              onScrub={(h) => {
+                setPlaying(false)
+                setHoursFromNow(h)
+              }}
+              playing={playing}
+              onTogglePlay={() => setPlaying((p) => !p)}
+            />
+          )}
+          {active === 'route-planner' && <RoutePlannerWorkspace selected={selected} onSelect={setSelected} layers={layers} />}
+          {active === 'iceberg-tracker' && <IcebergTrackerWorkspace selected={selected} onSelect={setSelected} layers={layers} />}
+          {active === 'vessel-monitor' && <VesselMonitorWorkspace selected={selected} onSelect={setSelected} layers={layers} />}
+          {active === 'weather-ocean' && <WeatherOceanWorkspace selected={selected} onSelect={setSelected} layers={layers} />}
+          {active === 'risk-analysis' && <RiskAnalysisWorkspace />}
+          {active === 'historical-replay' && <HistoricalReplayWorkspace />}
+          {active === 'data-sources' && <DataSourcesWorkspace />}
+          {active === 'reports' && <ReportsWorkspace />}
+        </div>
+      </section>
+    </main>
+  )
+}
+
+export { NAV }
