@@ -175,6 +175,16 @@
   }
 }
 
+/* Reference-matched D.H.R.U.V. command-center treatment */
+body {
+  background: #06111d;
+  letter-spacing: -0.01em;
+}
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+.ops-scroll { background: linear-gradient(135deg, #071523 0%, #081827 48%, #06111d 100%); }
+.ops-scroll > div { max-width: 1540px; margin-inline: auto; }
+
 /* MapLibre overrides to match the dark ops aesthetic */
 .maplibregl-map {
   font-family: var(--font-sans);
