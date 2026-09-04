@@ -76,7 +76,7 @@ export default function DhruvConsole() {
           onDismissNotifications={() => setUnread(0)}
         />
         <div className="ops-scroll flex-1 overflow-auto p-3 md:p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 xl:hidden">
             <div>
               <div className="text-[10px] uppercase tracking-[.2em] text-primary">{title.eyebrow}</div>
               <h1 className="mt-1 text-lg font-semibold">{title.heading}</h1>
